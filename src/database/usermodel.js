@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const validator = require('validator');
 const bcrypt = require('bcryptjs');
+const Otp = require('./otpmodel');
 
 const userSchema = new mongoose.Schema(
     {
@@ -47,7 +48,7 @@ const userSchema = new mongoose.Schema(
               required: true,
               trim: true
           },
-        amount: {
+        balance: {
             type: Number,
             required: true,
             trim: true,
@@ -62,6 +63,13 @@ const userSchema = new mongoose.Schema(
         timestamps: true
     }
 )
+
+// userSchema.virtual('myotp', {
+//     ref: 'Otp',
+//     localField: '_id',
+//     foreignField: 'userid'
+// });
+
  userSchema.statics.checkCredentials = async (userid, password, user) => {
      try {
      const isMatch = await (bcrypt.compare(password,user.password) && bcrypt.compare(userid,user.userid));

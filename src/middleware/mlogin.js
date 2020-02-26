@@ -7,7 +7,6 @@ const accountcheck = async (req, res, next) => {
         if(!exist) {
             return res.status(404).send({ error: 'Please authenticate'});
         }
-
         req.user = exist;
         next();
     } catch (e) {
