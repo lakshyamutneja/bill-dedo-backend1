@@ -4,10 +4,12 @@ const express = require('express');
 const router = new express.Router();
 const accountcheck = require('../middleware/mlogin');
 var aesjs = require('aes-js');
+const bcrypt = require('bcryptjs');
 const client = require('twilio')(process.env.accountSid,process.env.authToken);
 
 router.post('/bankdetail', async (req, res) => {
     const user = new User(req.body);
+    console.log(user);
     try {
       await user.save();
       return res.status(201).send({ user });
@@ -17,21 +19,37 @@ router.post('/bankdetail', async (req, res) => {
     }
   });
   
-router.post('/bankauthentication',accountcheck, async (req,res) => {
-  const users = new User(req.user);
+router.post('/bankauthentication', async (req,res) => {
   try {
-      const isMatch = User.checkCredentials(req.body.userid,req.body.password,users);
-      isMatch.then((a) => {
-        if(a) {
-          res.status(200).send({'message':'Authenticated'});
-          } else {
-            res.status(404).send({'message':'Check your credentials'});
-          }
-      }).catch(error => {
-        console.log(error);
-      })
-      
+      const hasheduserid = await bcrypt.hash(req.body.userid,8);
+      console.log(hasheduserid,req.body.userid,req.body.password);
+      const users = await User.find();
+      //console.log(users);
+      var user = null;
+      for(let i=0;i<users.length;i++) {
+        const {userid,password} = users[i];
+     //   console.log(id,userid);
+        let ans =  await (bcrypt.compare(req.body.userid,userid) && bcrypt.compare(req.body.password,password));
+       // console.log(ans,users[i]);
+        if(ans) {  
+        user = users[i];
+          break;
+        }
+      }
+
+      console.log(user);
+      if(!user) {
+        throw "Check your credentials";
+      } else {
+        const hashedpassword = await bcrypt.hash(req.body.password,8);
+        if(!hashedpassword) { 
+          throw "Check your credentials";
+        } else {
+        res.status(200).send({'message':'Authenticated'});  
+    }
+    }
   } catch(error) {
+    console.log(error);
     res.status(400).send({error});
   }
 });
@@ -39,8 +57,6 @@ router.post('/bankauthentication',accountcheck, async (req,res) => {
 function getRandomInt(max) {
   return Math.floor(Math.random() * Math.floor(max));
 }
-
-
 
 async function compareOtp(recievedotp,uid, amount, balance) {
 
@@ -71,7 +87,7 @@ async function compareOtp(recievedotp,uid, amount, balance) {
       
       if(recievedotp===decryptedText ) {
         if(amount>balance) {
-          return'Transaction cancelled. Your spent exceeds your balance.';
+          return {message:'Transaction cancelled. Your spent exceeds your balance.',success:false};
         } else {
            User.updateOne({_id:uid},{balance: balance - amount},(error, response) => {
             if(response) {
@@ -80,17 +96,17 @@ async function compareOtp(recievedotp,uid, amount, balance) {
               console.log("error =>",error);
             }
           })
-          return `Transaction successful. Your Remaining Balance is ${balance - amount}`;
+          return {message:`Transaction successful. Your Remaining Balance is ${balance - amount}`,success:true};
         } 
       } else 
       {
-        return 'Otp does not match. Please try again.';
+        return {message:'Otp does not match. Please try again.', success:false};
       }
     } else {
-      return 'Time for otp is expired. Please try again later.';
+      return {message:'Time for otp is expired. Please try again later.',success:false};
     }
   } catch(error) {
-    return {sms:error}
+    return {message:error, success:false}
   }
 }
 
@@ -103,7 +119,7 @@ function otpencrypt(otp) {
   return encryptedHex;
 }
 
-router.get('/otpgeneration',accountcheck, async (req, res) => {
+router.post('/otpgeneration',accountcheck, async (req, res) => {
   var chk = req.body.chk;
   var sms='';
   console.log(req.user,chk);
@@ -114,8 +130,8 @@ router.get('/otpgeneration',accountcheck, async (req, res) => {
       const encryptedOtp = otpencrypt(otpp);
       const otp = await new Otp({userid: req.user._id, otp:encryptedOtp, otp_present: true});
       await otp.save(); 
-  const newotp = await Otp.findOne({userid:req.user._id});
-  console.log('otp =>',otp,newotp);
+      const newotp = await Otp.findOne({userid:req.user._id});
+      console.log('otp =>',otp,newotp);
       sms = "The otp for the transaction is "+ otpp + " and is valid for only 5 minutes.";
     }
     else if(chk===2) {
