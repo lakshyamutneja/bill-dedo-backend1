@@ -7,11 +7,13 @@ const otpSchema = new mongoose.Schema({
         },
     otp: {
         type: String,
-        required: true
+        required: true,
+        trim:true
     },
     otp_present: {
         type: Boolean,
-        required: false
+        required: false,
+        trim:true
     }
 },
 {

@@ -2,7 +2,8 @@ const User = require('../database/usermodel');
 
 const accountcheck = async (req, res, next) => {
     try {
-        const exist = await User.findOne({ _id: id});
+        //console.log(req);
+        const exist = await User.findOne({ _id: req.body.userid});
         if(!exist) {
             return res.status(404).send({ error: 'Please authenticate'});
         }

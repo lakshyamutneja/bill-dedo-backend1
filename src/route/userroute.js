@@ -12,10 +12,10 @@ router.post('/bankdetail', async (req, res) => {
     console.log(user);
     try {
       await user.save();
-      return res.status(201).send({ user });
+      return res.status(201).send({ success:true });
     } catch (e) {
       console.log(e);
-      return res.status(400).send({ error: e });
+      return res.status(400).send({success:false, error: e });
     }
   });
   
@@ -41,12 +41,7 @@ router.post('/bankauthentication', async (req,res) => {
       if(!user) {
         throw "Check your credentials";
       } else {
-        const hashedpassword = await bcrypt.hash(req.body.password,8);
-        if(!hashedpassword) { 
-          throw "Check your credentials";
-        } else {
-        res.status(200).send({'message':'Authenticated'});  
-    }
+        res.status(200).send({'message':'Authenticated', userid:user._id});  
     }
   } catch(error) {
     console.log(error);
@@ -79,6 +74,7 @@ async function compareOtp(recievedotp,uid, amount, balance) {
     //     console.log('error =>', error);
     //   }
     // });
+    await Otp.findOneAndUpdate({userid:uid},{otp_present:false,otp:''});
     if(timediff< 5 * 60 * 1000 && otp.otp_present) {
       var encryptedBytes = aesjs.utils.hex.toBytes(otp.otp);
       var aesCtr = new aesjs.ModeOfOperation.ctr(key_256, new aesjs.Counter(5));
@@ -89,13 +85,7 @@ async function compareOtp(recievedotp,uid, amount, balance) {
         if(amount>balance) {
           return {message:'Transaction cancelled. Your spent exceeds your balance.',success:false};
         } else {
-           User.updateOne({_id:uid},{balance: balance - amount},(error, response) => {
-            if(response) {
-              console.log("response =>",response);
-            } if(error) {
-              console.log("error =>",error);
-            }
-          })
+          await User.findOneAndUpdate({_id:uid},{balance:balance-amount});
           return {message:`Transaction successful. Your Remaining Balance is ${balance - amount}`,success:true};
         } 
       } else 
@@ -119,40 +109,60 @@ function otpencrypt(otp) {
   return encryptedHex;
 }
 
+sendmessage = (number,sms) => {
+   client.messages
+      .create({
+         body: sms,
+         from: '+13017602048',
+         statusCallback: 'http://postb.in/1234abcd',
+         to: `+${number}`
+       })
+      .then(message => {
+        console.log(message);
+      });
+}
 router.post('/otpgeneration',accountcheck, async (req, res) => {
-  var chk = req.body.chk;
+  console.log('post request');
+  var chk = req.body.check;
   var sms='';
   console.log(req.user,chk);
       
   try {
     if(chk === 1) {
       const otpp = "" + getRandomInt(10)  + getRandomInt(10) + getRandomInt(10) + getRandomInt(10) + getRandomInt(10) + getRandomInt(10);
-      const encryptedOtp = otpencrypt(otpp);
-      const otp = await new Otp({userid: req.user._id, otp:encryptedOtp, otp_present: true});
+      const encryptedOtp = await otpencrypt(otpp);
+      //await Otp.deleteMany({userid: req.user._id});
+      const otp_of_user_exist = await Otp.findOne({userid:req.user._id}); 
+      
+      if(!otp_of_user_exist) {
+      console.log('new otp');
+        const otp = new Otp({userid: req.user._id, otp:encryptedOtp, otp_present: true});
       await otp.save(); 
-      const newotp = await Otp.findOne({userid:req.user._id});
-      console.log('otp =>',otp,newotp);
-      sms = "The otp for the transaction is "+ otpp + " and is valid for only 5 minutes.";
+      sendmessage(req.user.number,"The otp for the transaction is "+ otpp + " and is valid for only 5 minutes.");
+      res.status(200).send({userid:req.user._id});
+      } else  {
+        console.log('alread exist');
+        await Otp.findOneAndUpdate({userid: req.user._id},{
+          otp_present:true,
+          otp: encryptedOtp
+        });
+      sendmessage(req.user.number,"The otp for the transaction is "+ otpp + " and is valid for only 5 minutes.");
+     res.status(200).send({userid:req.user._id});
+      }
     }
     else if(chk===2) {
       
       var sms = await compareOtp(req.body.otp, req.user._id, req.body.amount, req.user.balance);
-      console.log('sms =>',sms);
+      if(sms.success) {
+        sendmessage(req.user.number,sms.message);
+        res.status(200).send({success:true,message:sms.message});
+      } else {
+        sendmessage(req.user.number,sms.meassage);
+        res.status(200).send({success:false,message:sms.message});
+      }
+    } else {
+      res.status(404).send({success:false, messaage:"Wrong request"});
     }
-    console.log("sms ===>",sms);
-    res.status(200).send({message:sms});
-    // client.messages
-    //   .create({
-    //      body: sms,
-    //      from: '+13017602048',
-    //      statusCallback: 'http://postb.in/1234abcd',
-    //      to: `+${req.user.number}`
-    //    })
-    //   .then(message => {
-    //     console.log(message);
-    //     res.status(200).send({message:sms});
-    //   });
-     // res.status(400).send({otp});
   } catch(error) {
     console.log(error);
     res.status(400).send({error});
