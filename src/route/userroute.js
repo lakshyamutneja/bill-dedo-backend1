@@ -5,7 +5,7 @@ const router = new express.Router();
 const accountcheck = require('../middleware/mlogin');
 var aesjs = require('aes-js');
 const bcrypt = require('bcryptjs');
-const client = require('twilio')(process.env.accountSid,process.env.authToken);
+const client = require('twilio')("ACd113869f5043148ad2d9ff31bedd7942","b7d90064245d5d5d96dda4387602b048");
 
 router.post('/bankdetail', async (req, res) => {
     const user = new User(req.body);
@@ -113,7 +113,7 @@ sendmessage = (number,sms) => {
    client.messages
       .create({
          body: sms,
-         from: '+13017602048',
+         from: '+12019497874',
          statusCallback: 'http://postb.in/1234abcd',
          to: `+${number}`
        })
